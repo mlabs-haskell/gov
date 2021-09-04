@@ -520,7 +520,7 @@ initialized to:
     , inFavor = VoteAct.inFavor
     , consumed = False
     }
-    ```
+```
 minting & Burning:
 - must include a ProposalState token
 - can only be burned if a ProposalState token is included in the transaction (when vote duplication has occured)
