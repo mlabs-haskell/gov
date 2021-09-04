@@ -284,7 +284,7 @@ parameters:
 ```
 GovernanceValidatorParams { governanceStateCurrencySymbol :: CurrencySymbol,
                           , ownerAddress :: PubKeyHash
-                          , danaTokenAssetClass :: AssetClass
+                          , govTokenAssetClass :: AssetClass
                           }
 ```
 
@@ -378,7 +378,7 @@ outputs:
 - fee/collateral UTXO remainder -> user Wallet
 - GovernanceState token -> Governance Validator script (decrement `GovernanceState.stakeTotal` amount by `WithdrawAct.amount`)
 - UserStakeDetail Token -> Governance Validator script (decrement `UserStakeDetail.amountStaked` by `WithdrawAct.amount`)
-- Withdrawal $GOV UTXO (contains WithdrawAct.amount of Dana) -> User Wallet
+- Withdrawal $GOV UTXO (contains WithdrawAct.amount of GOV) -> User Wallet
 - (Optional) Remainder UTXO (contains any $GOV from input which exceeds `WithdrawAct.amount` -> Governance Validator Script
 - (optional) BalanceRecord Token -> Governance Validator (set `BalanceRecord.originalTxOutRef` to the consumed TxOutRef if it was a `Nothing`)
 - BalanceRecord Token (MINTED) -> Governance Validator (set `balanceAfterTx` field to the new balance the user holds in the stakepool following the tranaction)
@@ -501,10 +501,10 @@ outputs:
 - ProposalState -> new Proposal address determined by script
 
 ### VoteRecord Token
-  Token Type: Record token witnessing a vote that occured
-  
-  Purpose: displays a user's vote, which is tabulated after a voting period ends
-  
+Token Type: Record token witnessing a vote that occured
+
+Purpose: displays a user's vote, which is tabulated after a voting period ends
+
 carries datum :
 ``` 
 VoteRecord
@@ -521,6 +521,7 @@ initialized to:
     , consumed = False
     }
 ```
+
 minting & Burning:
 - must include a ProposalState token
 - can only be burned if a ProposalState token is included in the transaction (when vote duplication has occured)
