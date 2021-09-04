@@ -505,22 +505,22 @@ outputs:
   
   Purpose: displays a user's vote, which is tabulated after a voting period ends
   
-  carries datum :
-  ``` 
+carries datum :
+``` 
+VoteRecord
+  { address :: Address
+  , inFavor :: Bool
+  , consumed :: Bool
+  }
+```
+initialized to:
+```
   VoteRecord
-    { address :: Address
-    , inFavor :: Bool
-    , consumed :: Bool
+    { address = VoteAct.Address
+    , inFavor = VoteAct.inFavor
+    , consumed = False
     }
     ```
-    initialized to:
-    ```
-      VoteRecord
-        { address = VoteAct.Address
-        , inFavor = VoteAct.inFavor
-        , consumed = False
-        }
-        ```
 minting & Burning:
 - must include a ProposalState token
 - can only be burned if a ProposalState token is included in the transaction (when vote duplication has occured)
