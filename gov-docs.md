@@ -25,9 +25,9 @@ User Roles: Staker, Admin, Pollster
 
 1) Staker Deposits $GOV for the first time by calling the `GovernanceValidator` with redeemer `DepositAct`
 
-effects: 
-- a BalanceRecord is minted, reflecting the balance after this tx.
-- a UserStakeDetail is minted, which points at the BalanceRecord with a txOutRef
+  effects: 
+  - a BalanceRecord is minted, reflecting the balance after this tx.
+  - a UserStakeDetail is minted, which points at the BalanceRecord with a txOutRef
 
 note: step 1 can be followed by any number of subsequent deposits/withdraws, minting a new BalanceRecord each time.
 
@@ -35,69 +35,72 @@ note: step 1 can be followed by any number of subsequent deposits/withdraws, min
 
 3) Staker calls the ProposalFactory Validator with redeemer `CreateProposalAct`
 
-effects:
-- new IndividualProposal Validator is initialized
+  effects:
+  - new IndividualProposal Validator is initialized
 
 4) during the voting period, the Staker attempts to vote twice by calling `IndividualProposal` Validator with redeemer `VoteAct` twice.
 
-constraint:
-- the staker must not have withdrawn their balance in order to register a vote
+  constraint:
+  - the staker must not have withdrawn their balance in order to register a vote
 
-effects:
-- a VoteRecord is minted, reflecting that the Staker's address has voted for the proposal (this happens twice in this scenario)
+  effects:
+  - a VoteRecord is minted, reflecting that the Staker's address has voted for the proposal (this happens twice in this scenario)
 
 5) After or during the voting period, the pollster (or any other user) may call `IndividualProposal` with redeemer `ProveDuplicate`
 
-constraint: the Pollster must provide two voting records for the same address & proposal.
+  constraint: the Pollster must provide two voting records for the same address & proposal.
 
-effect:
-- the vote is corrected
-- (possibly) a portion of the Staker's $GOV stake is transferred to the caller/pollster
+  effect:
+  - the vote is corrected
+  - (possibly) a portion of the Staker's $GOV stake is transferred to the caller/pollster
 
-note: this can happen interchangeably with step 6 in case our Pollster fails to do this fails to do this (but should be automatic in off-chain code).
+note: this can happen interchangeably with step 6 in case our Pollster fails to do this (but should be automatic in off-chain code).
 
 6) the Pollster proves votes onchain by calling `IndividualProposal` with redeemer `CountVote`
 
-constraints:
-- we can probably only do this 1 or 2 voters at a time
-- vote weights are confirmed by presenting BalanceRecords/UserStakeDetails covering the period of time where the voting period ended.
+  constraints:
+  - we can probably only do this 1 or 2 voters at a time
+  - vote weights are confirmed by presenting BalanceRecords/UserStakeDetails covering the period of time where the voting period ended.
 
-effects:
-- the included vote & balance records are accumulated on ProposalState.
-- the included vote records are marked as consumed to prevent manipulation.
+  effects:
+  - the included vote & balance records are accumulated on ProposalState.
+  - the included vote records are marked as consumed to prevent manipulation.
 
 7) a review period continues for some time after the voting period, to give other users an opportunity to prove duplicate votes.
 
 8) following the review period, the Pollster/Admin can Execute the proposal
 
-constraints:
-- votes must be fully counted (this is verifiable within ProposalState)
-- Proposal success parameters must be met
-- proposal must not have been executed previously
+  constraints:
+  - votes must be fully counted (this is verifiable within ProposalState)
+  - Proposal success parameters must be met
+  - proposal must not have been executed previously
 
 ### Scenario 2 - reward dispersal
 
 1) Staker Deposits $GOV for the first time by calling the `GovernanceValidator` with redeemer `DepositAct`
 
-effects: 
-- a BalanceRecord is minted, reflecting the balance after this tx.
-- a UserStakeDetail is minted, which points at the BalanceRecord with a txOutRef
+  effects: 
+  - a BalanceRecord is minted, reflecting the balance after this tx.
+  - a UserStakeDetail is minted, which points at the BalanceRecord with a txOutRef
 
 note: step 1 can be followed by any number of subsequent deposits/withdraws, minting a new BalanceRecord each time.
 
 2) the Admin provides rewards by calling the `GovernanceValidator` with redeemer `ProvideRewardAct`
 
 3) at least 5 days from the previous Epoch end time, the Administrator (or anyone) calls `GovernanceValidator` with redeemer `TriggerEpochAct`
-effects:
-- a `LastEpochScriptState` is minted, recording the rewards and stake pool size at the time this occured
-- `GovernanceState.rewardsTotal` is set to zero, so the next epoch will include seperate funds.
+
+  effects:
+  - a `LastEpochScriptState` is minted, recording the rewards and stake pool size at the time this occured
+  - `GovernanceState.rewardsTotal` is set to zero, so the next epoch will include seperate funds.
 
 4) Staker calls `GovernanceValidator` with `ClaimRewardAct`
-constraints: 
-- if the user has past unclaimed epochs other than the one being claimed (available from UserStakeDetail), then we must reject and those past epochs must be claimed _first_ (automatic from offchain code).
-- user must be able to prove stake balance through a combination of BalanceRecord and UserStakeDetails, transactions occuring ON the ending timstamp of the epoch are determined to be _after_ this epoch.
-effect:
-- the user receives a share of the rewards for the epoch proportional to the proven balance relative to the overall total of the stake for that epoch.
+
+  constraints: 
+  - if the user has past unclaimed epochs other than the one being claimed (available from UserStakeDetail), then we must reject and those past epochs must be claimed _first_ (automatic from offchain code).
+  - user must be able to prove stake balance through a combination of BalanceRecord and UserStakeDetails, transactions occuring ON the ending timstamp of the epoch are determined to be _after_ this epoch.
+
+  effects:
+  - the user receives a share of the rewards for the epoch proportional to the proven balance relative to the overall total of the stake for that epoch.
 
 ## One-shot Tokens
 
@@ -115,7 +118,7 @@ One-shot tokens within the system are:
   ```
   GovernanceState { stakeTotal: Natural
                   , rewardsTotal: Value 
-                  , lastEpoch :: Maybe Natural
+                  , lastEpoch :: Natural
                   , lastEpochEnded :: PosixTime
                   }
   ```
@@ -124,7 +127,7 @@ One-shot tokens within the system are:
   ```
   GovernanceState { stakeTotal = 0
                   , rewardsTotal = Value.empty 
-                  , lastEpoch = Nothing
+                  , lastEpoch = 0
                   , lastEpochEnded = currentTime - 3 days
                   }
   ```
@@ -164,8 +167,6 @@ the `governanceScriptAddress` and `governanceStateCurrencySymbol` parameters are
   UserStakeDetail { userAddress :: Address
                   , amountStaked :: Natural
                   , lastReward :: PosixTime 
-                  , lockedUntil :: Maybe PosixTime
-                  , lockedBy :: MaybeAddress
                   , lastBalanceRecord :: TxOutRef
                   , lastEpochClaimed :: Natural
                   }
@@ -264,7 +265,6 @@ inputs:
                        , rewardsTotal = GovernanceState.rewardsTotal 
                        , endTime = currentTime
                        , epochNumber = lastEpochNumber + 1 (zero-indexed)
-                       -- values determined by Validator.
                        }
   ```
   
@@ -389,6 +389,7 @@ Purpose: receive rewards distributed by scripts or individuals for $GOV stakers,
 
 Validation Rules:
 - user may include one or more UTXOs with rewards in collections of arbitrary native tokens, (reward UTXOs) these should total to match ProvideRewardsAct.value
+- in a real implementation, we need to limit the tokens allowed for reward, otherwise this could be an attack vector.
 
 inputs:
 - fee/collateral UTXO (from USER)
@@ -435,20 +436,20 @@ outputs:
 
 Purpose: the first step in distributing rewards, records the rewards totals for a given reward period/epoch and resets state to track for the new epoch
 
-note: this will rely on a constant `epochLength :: PosixTimeRange`
+note: this will rely on a constant `epochLength :: DiffMilliSeconds`
 
 Validation rules:
 - `GovernanceState.lastEpochEnds` must be at least `epochLength` less than the `currentTime`.
 - anyone can call this
 
 inputs:
-fee/collateral UTXO remainder (from USER)
-GovernanceState token (from Governance Validator script)
+- fee/collateral UTXO remainder (from USER)
+- GovernanceState token (from Governance Validator script)
 
 outputs:
-fee/collateral UTXO remainder -> user Wallet
-GovernanceState token -> Governance Validator script (set `GovernanceState.rewardsTotal` to `Value.empty`, set `GovernanceState.lastEpochEnds` to current time,  increment `GovernanceState.lastEpoch` )
-LastEpochScriptState state token (MINTED)-> Governance Validator Script (set `LastEpochScriptState.stakeTotal` to `GovernanceState.stakeTotal`, and `LastEpochScriptState.rewardsTotal` to `GovernanceState.rewardsTotal`, `LastEpochScriptState.epochNumber` to `GovernanceState.lastEpoch` + 1)
+- fee/collateral UTXO remainder -> user Wallet
+- GovernanceState token -> Governance Validator script (set `GovernanceState.rewardsTotal` to `Value.empty`, set `GovernanceState.lastEpochEnds` to current time,  increment `GovernanceState.lastEpoch` )
+- LastEpochScriptState state token (MINTED)-> Governance Validator Script (set `LastEpochScriptState.stakeTotal` to `GovernanceState.stakeTotal`, and `LastEpochScriptState.rewardsTotal` to `GovernanceState.rewardsTotal`, `LastEpochScriptState.epochNumber` to `GovernanceState.lastEpoch` + 1)
 
 ## Proposal Minting Policy (example)
 parameters:
