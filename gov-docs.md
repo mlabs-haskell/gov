@@ -176,7 +176,7 @@ the `governanceScriptAddress` and `governanceStateCurrencySymbol` parameters are
   UserStakeDetail { userAddress :: Address
                   , amountStaked :: Natural
                   , lastReward :: PosixTime 
-                  , lastBalanceRecord :: TxOutRef
+                  , lastBalanceRecordTimeStamp :: PosixTime
                   , lastEpochClaimed :: Natural
                   , delegated :: Bool
                   , index :: Natural
@@ -188,7 +188,7 @@ the `governanceScriptAddress` and `governanceStateCurrencySymbol` parameters are
   UserStakeDetail { userAddress = DepositAct.address -- determined by validator
                   , amountStaked = DepositAct.amount -- determined by validator
                   , lastReward = currentTime
-                  , lastBalanceRecord = firstBalanceRecord -- determined by validator
+                  , lastBalanceRecordTimeStamp = firstBalanceRecordTimeStamp -- determined by validator
                   , lastEpochClaimed = GovernanceState.lastEpoch
                   , delegated = False
                   , index = GovernanceState.totalStakers -- 0 indexed
@@ -218,8 +218,7 @@ carries Datum:
 BalanceRecord
   { userAddress :: Address
   , balanceAfterTx :: Natural
-  , lastBalanceRecord :: Maybe TxOutRef
-  , originalTxOutRef :: Maybe TxOutRef
+  , lastBalanceRecordTimeStamp :: Maybe PosixTime
   , timestamp :: PosixTime
   }
 ```
@@ -228,8 +227,7 @@ initialized to:
 BalanceRecord
   { userAdderss = DepositAct.address / WithdrawAct.address
   , balanceAfterTx = balanceAfterTx
-  , lastBalanceRecord = lastBalanceRecordTxOutRef
-  , originalTxOutRef = Nothing -- we can't assign the original UTXO here until the next time it is consumed.
+  , lastBalanceRecordTimeStamp = Nothing / lastTimeStamp -- determined by validator
   , timestamp = currentTime
   }
   -- determined by validator
@@ -455,7 +453,7 @@ outputs:
 - (Optional) GovernanceState token -> Governance Validator script (increment `GovernanceState.totalStakers`)
 - UserStakeDetail Token (MINTED?) -> Governance Validator script (increment `UserStakeDetail.amountStaked` by `DepositAct.amount` OR mint fresh with `DepositAct.amount` as the initial value (other values should be initialized to defaults, `UserStakeDetail.address` should match `DepositAct.address`, `UserStakeDetail.lastBalanceRecord should point to the utxo containing a newly minted BalanceRecord).
 - (optional) BalanceRecord Token -> Governance Validator (set `BalanceRecord.originalTxOutRef` to the consumed TxOutRef if it was a `Nothing`)
-- BalanceRecord Token (MINTED) -> Governance Validator (set `balanceAfterTx` field to the new balance the user holds in the stakepool following the tranaction)
+- BalanceRecord Token (MINTED) -> Governance Validator (set `balanceAfterTx` field to the new balance the
 
 ### WithdrawAct
 
@@ -480,8 +478,8 @@ outputs:
 - UserStakeDetail Token -> Governance Validator script (decrement `UserStakeDetail.amountStaked` by `WithdrawAct.amount`)
 - Withdrawal $GOV UTXO (contains WithdrawAct.amount of GOV) -> User Wallet
 - (Optional) Remainder UTXO (contains any $GOV from input which exceeds `WithdrawAct.amount` -> Governance Validator Script
-- (optional) BalanceRecord Token -> Governance Validator (set `BalanceRecord.originalTxOutRef` to the consumed TxOutRef if it was a `Nothing`)
-- BalanceRecord Token (MINTED) -> Governance Validator (set `balanceAfterTx` field to the new balance the user holds in the stakepool following the tranaction)
+- (optional) BalanceRecord Token -> Governance Validator 
+- BalanceRecord Token (MINTED) -> Governance Validator (set `balanceAfterTx` field to the new balance the user holds in the stakepool following the tranaction, set `lastBalanceRecordTimeStamp` to the timestamp of the OTHER BalanceRecord one was presented and matches `UserStakeDetail.
 
 ### DelegateVote
 Purpose: To allow a user to vote on one's behalf.
@@ -541,8 +539,8 @@ Validation rules
 - `LastEpochScriptState.epochNumber` must be equal to (`UserStakeDetail.lastEpochClaimed` +1)
 - `BalanceRecord.address` on both records must match `UserStakeDetail.address`
 - `UserStakeDetail.address must validate this transaction`
-- one BalanceRecord must hold a timestamp _prior_ to the `LastEpochScriptState.endTime`, the `BalanceRecord.balanceAfterTx`  field in this UTXO is used as the source of truth for the user's balance at the end of the epoch being claimed.
-- one BalanceRecord must hold a timestamp _after OR equal to_ `LastEpochScriptState.endTime` _OR this second BalanceRecord can be excluded if and only if the other BalanceRecord has a txOutRef or a datum field `BalanceRecord.originalTxOutRef` matching the `UserStakeDetail.lastBalanceRecord`
+- one BalanceRecord must hold a `BalanceRecord.timestamp` _prior_ to the `LastEpochScriptState.endTime`, the `BalanceRecord.balanceAfterTx`  field in this UTXO is used as the source of truth for the user's balance at the end of the epoch being claimed.
+- one BalanceRecord must hold a `BalanceRecord.timestamp` _after OR equal to_ `LastEpochScriptState.endTime` _OR this second BalanceRecord can be excluded if and only if the other BalanceRecord has a txOutRef or a datum field `BalanceRecord.originalTxOutRef` matching the `UserStakeDetail.lastBalanceRecord`
 - amount transferred to user is a value defined by: (`BalanceRecord.balanceAfterTx` / `LastEpochScriptState.stakeTotal`) * `LastEpochScriptState.rewardsTotal`
 
 inputs:
