@@ -33,7 +33,6 @@ note: step 1 can be followed by any number of subsequent deposits/withdraws
 
 2) Staker B Deposits $GOV as well, creating a similar paper trail.
 
-
 3) the Admin deploys a ProposalFactory
 
 4)Staker calls the ProposalFactory Validator with redeemer `CreateProposalAct`
@@ -396,6 +395,7 @@ the `DepositAct.address` field is purposefully available to be a wallet or scrip
 Validation rules:
 - user must have provided 1 or more UTXO's containing a total of at least `DepositAct.amount` of $GOV (Deposit UTXOS)
 - user may have included a `UserStakeDetail` from the Governance validator script matching their `DepositAct.address`, OR user must have provided the GovernanceState token so that a UserStakeDetail is minted for them (with index corresponding to the current `GovernanceState.totalStakers`)
+- `UserStakeDetail.lockedBy` must be `[]`.
 
   in both cases, the resulting UserStakeDetail should be sent (back) to the Governance Validator script address, with the new lastBalanceRecord txOutRef tagged
 - any Wallet can deposit $GOV for Any address onchain. there is no restriction.
@@ -422,11 +422,12 @@ Validation Rules:
 - if UserStakeDetail for the user's address is not included in the tx, fail.
 - if amount specified in WithdrawAct.amount is greater than the balance of the `UserStakeDetail.amountStaked`, fail
 - transaction must be signed by `UserStakeDetail.address` if it is a PubKeyHash, or include a utxo from the validator if it is a ValidatorHash.
+- `UserStakeDetail.lockedBy` must be `[]`.
 
+-- note: we may implement UserStakeDetail deletion in a future iteration, as infinite stake details constitutes a known potential exploit (making batch job processes inordinately expensive). this seems to be acheivable using a CoPrime indexing solution.
 
 inputs:
 - fee/collateral UTXO (from USER)
-- (optional) GovernanceState token  (from Governance Validator Script)
 - UserStakeDetail token  (from Governance Validator Script)
 - Staked $GOV UTXO (from Governance Validator Script)
 
@@ -488,8 +489,6 @@ outputs:
 - fee/collateral UTXO remainder -> user Wallet
 - Reward UTXO remainder -> Governance Validator Script
 - UserStakeDetail Token -> Governance Validator script (increment `UserStakeDetail.lastEpochClaimed`)
-- BalanceRecord Token -> Governance Validator (set `BalanceRecord.originalTxOutRef` to the consumed TxOutRef if it was a `Nothing`)
-- BalanceRecord Token -> Governance Validator (set `BalanceRecord.originalTxOutRef` to the consumed TxOutRef if it was a `Nothing`)
 - LastEpochScriptState Token -> Governance Validator
 
 ### EpochCountingAct
@@ -511,17 +510,47 @@ Validation rules:
 
 note: with this we should be able to scale this logarithmically.
 
+-- note: currently there are three variations on the way this redeemer can be called, it is likely doing too much. however these all contribute to a folding operation and may be necessary for an efficient operation. ideally this redeemer allows for all of these to happen in parallel, but we may need something more restrictive.
+
+first case: governance state is included so that we can mint an optimum number of `LastEpochProof`
 inputs:
 - fee/collateral UTXO remainder (from USER)
 - GovernanceState token (from Governance Validator script)
-- 1 or more: LastEpochProof UTXO (from Governance Validator Script)
 - one or more sets of:
   - UserStakeDetail UTXO (from Governance Validator)
 
 outputs:
 - fee/collateral UTXO remainder -> user Wallet
 - GovernanceState token -> Governance Validator script 
-- LastEpochProof UTXO(s) (Minted/Burned?) ->  Governance Validator Script (modify range fields to include valid indexes from userStakeDetail, or from merging `LastEpochProof`
+- LastEpochProof UTXO(s) (MINTED) ->  Governance Validator Script (modify range fields to include valid indexes from `UserStakeDetail`)
+- all sets of 
+  - UserStakeDetail -> Governance Validator
+- UserStakeSnapshot UTXO  (MINTED) -> GovernanceValidator
+
+second case: we have multiple `LastEpochProof` we would like to add together 
+- index ranges must be adjacent
+
+inputs:
+- fee/collateral UTXO remainder (from USER)
+- (2 or more) LastEpochProof UTXO (from Governance Validator Script)
+
+outputs:
+- fee/collateral UTXO remainder -> user Wallet
+- LastEpochProof UTXO (exactly 1) ->  Governance Validator Script (modify range fields to include valid indexes from `UserStakeDetail`)
+- LastEpochProof UTXO(s) (BURNED)
+
+third case: we wish to fold our `LastEpochProof` over 1 or more `UserStakeDetail`s
+- index ranges must be adjacent
+
+inputs:
+- fee/collateral UTXO remainder (from USER)
+- LastEpochProof UTXO(s) (from Governance Validator Script)
+- one or more sets of:
+  - UserStakeDetail UTXO (from Governance Validator)
+
+outputs:
+- fee/collateral UTXO remainder -> user Wallet
+- LastEpochProof UTXO(s) ->  Governance Validator Script (modify range fields to include valid indexes from `UserStakeDetail`
 - all sets of 
   - UserStakeDetail -> Governance Validator
 - UserStakeSnapshot UTXO  (MINTED) -> GovernanceValidator
@@ -746,7 +775,6 @@ outputs:
 Purpose: To allow a successful proposal to take an action which confirms it's success - it may update runtime configuration of a validator, or spend funds, or any number of other things not reliant on this governance spec.
 
 Validation rules:
-- `ProposalState.voteAddressesCounted` must match `ProposalState.totalVoteAddresses`
 - `ProposalState.reviewTimeEnds` must have passed
 - `ProposalState.totalVotesInFavor` + `ProposalState.totalVotesAgainst` must meet some constant `quorum`
 - `PropsalState.totalVotesInFavor` must be greater than `ProposalState.totalVotesAgainst`
