@@ -84,7 +84,6 @@ note: step 1 can be followed by any number of subsequent deposits/withdraws
   effects: 
   - a UserStakeDetail is minted
 
-note: step 1 can be followed by any number of subsequent deposits/withdraws, minting a new BalanceRecord each time.
 
 2) the Admin provides rewards by calling the `GovernanceValidator` with redeemer `ProvideRewardAct`
 
@@ -174,7 +173,6 @@ the `governanceScriptAddress` and `governanceStateCurrencySymbol` parameters are
   UserStakeDetail { userAddress :: Address
                   , amountStaked :: Natural
                   , lastReward :: PosixTime 
-                  , lastBalanceRecordTimeStamp :: PosixTime
                   , lastEpochClaimed :: Natural
                   , lockedBy :: [(ValidatorHash, (Bool, Natural)] -- the vote, for/against and the balance that user had at the time the vote was cast.
                   , delegatedTo :: Maybe Address
@@ -187,7 +185,6 @@ the `governanceScriptAddress` and `governanceStateCurrencySymbol` parameters are
   UserStakeDetail { userAddress = DepositAct.address -- determined by validator
                   , amountStaked = DepositAct.amount -- determined by validator
                   , lastReward = currentTime
-                  , lastBalanceRecordTimeStamp = firstBalanceRecordTimeStamp -- determined by validator
                   , lastEpochClaimed = GovernanceState.lastEpoch
                   , lockedBy = []
                   , delegatedTo = Nothing
@@ -247,7 +244,7 @@ inputs:
 - fee/collateral UTXO remainder -> user Wallet
 - GovernanceState UTXO -> Governance Validator
 - UserStakeDetail (MINTED?) -> Governance Validator
-- BalanceRecord (MINTED) -> Governance Validator
+- UserStakeSnapshot (MINTED) -> Governance Validator
 
 
 ### LastEpochProof token (Log n Tokens per epoch)
@@ -280,7 +277,6 @@ LastEpochProof
 mint & burn:
 - the UserStakeDetail.index must match the value used as the starting value for `countedIndexRangeStart` and unless a set of records is provided, also `countedIndexRangeEnd`
 - if a set is provided, they must fill out a numerical order and the transaction must fit on chain.
-- each set of UserStakeDetail, Balance record must confirm the user's address and the BalanceRecords must refer to to the correct `BalanceRecord.timestamp`. the user's Balance is the `BalanceRecord.balanceAfterTx` of the BalnceRecord with the _earlier_ timestamp, so long as the range of the two timestamps includes the currentTime
 
 
 inputs:
@@ -302,8 +298,6 @@ inputs:
   Token Type: State token for script, only needed on specific actions. 
   
   purpose: This datum is needed as part of the reward distribution procedure, to record the exact state of the rewards and stakepool sizes so that they might be used to calculate reward dividends for each staker of $GOV at the end of a given reward period/epoch.
-  
-  similar to BalanceRecords, these form a distributed linked-list system with the head at UserStakeDetail, where new records are inserted between the UserStakeDetail and the previous record.
   
   carries datum: 
   ```
@@ -388,7 +382,7 @@ scope notes:
 
 ### DepositAct
 
-Purpose: The user adds $GOV to their staked totals, may mint UserStakeDetail, mints BalanceRecord.
+Purpose: The user adds $GOV to their staked totals, may mint UserStakeDetail
 
 the `DepositAct.address` field is purposefully available to be a wallet or script address as a user may want to delegate control over stake and over rewards to an external contract.
 
@@ -397,11 +391,9 @@ Validation rules:
 - user may have included a `UserStakeDetail` from the Governance validator script matching their `DepositAct.address`, OR user must have provided the GovernanceState token so that a UserStakeDetail is minted for them (with index corresponding to the current `GovernanceState.totalStakers`)
 - `UserStakeDetail.lockedBy` must be `[]`.
 
-  in both cases, the resulting UserStakeDetail should be sent (back) to the Governance Validator script address, with the new lastBalanceRecord txOutRef tagged
 - any Wallet can deposit $GOV for Any address onchain. there is no restriction.
-- any pre-existing BalanceRecord UTXO supplied must either have a txOutRef OR `BalanceRecord.originalTxOutRef` field in datum matching the `UserStakeDetail.lastBalanceRecord` field, or fail 
 
-*known issue: we don't explicitly prevent duplicate addresses here,  hypothetically if this became an issue we could provide a schema endpoint to perform a merger using existing redeemers*
+*known issue: we don't explicitly prevent duplicate addresses here,  hypothetically if this became an issue we could provide a schema endpoint to perform a merger using existing redeemers, we are also looking at methods to enable constant-time UserStakeDetail deletion, such as indexing on a bitmap. this would allow us to enforce a minimum $GOV deposit, making it expensive to create arbitrary accounts*
 
 inputs:
 - fee/collateral UTXO (from USER)
